@@ -5,6 +5,8 @@ import time
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.proxy import Proxy, ProxyType
 import json
@@ -18,16 +20,36 @@ import concurrent.futures as pool
 import multiprocessing, time
 
 CONNECTIONS = 3
+PROCESS_NUMBER = 0
 
-thread_counter = 0
 counter_lock = multiprocessing.Lock()
-def run():
-    driver = create_drivers(1)
-    driver_job(*driver)
+def run(process_num,urls):
+    global PROCESS_NUMBER
+    print(len(urls))
+    PROCESS_NUMBER = process_num
+    print(f"{process_num} is staring...")
+    driver = create_drivers(1)[0]
+    driver.implicitly_wait(10)
+
+    div = len(urls) // CONNECTIONS
+    mod = len(urls) % CONNECTIONS
+    start = (process_num-1)*div
+    end = start + div
+    if process_num <= mod:
+        end+=1
+    else:
+        start+=mod
+
+    for i in range(start, end):
+        url = urls[i]
+        print(f"{process_num} is processing {i} match ({url})...")
+        try:
+            get_summary(driver,url)
+        except Exception as e:
+            print(e)
+
+
 def create_drivers(n):
-
-
-
     drivers = []
     for i in range(n):
         service = Service(executable_path='./chromedriver.exe')
@@ -47,71 +69,73 @@ def create_drivers(n):
         drivers.append(driver)
     return drivers
 
+def get_summary(driver,url):
 
-def driver_job(driver):
-    print(driver)
-    global counter_lock
-    global thread_counter
-    with counter_lock:
-        thread_counter += 1
-        thread_num = thread_counter
-        print(f"{thread_num} process is running...")
-    url = "https://www.livescore.in/ru/"
+
+    driver.get(url)
+    time.sleep(2)
+
+    print("--------------------------------")
+    odds = driver.find_element(By.CLASS_NAME,"oddsRow").find_elements(By.CLASS_NAME,"oddsValueInner")
+    left,draw,right = odds if odds else (None,None,None)
+    if left and draw and right:
+        print(f"left - {left.text}\nright - {right.text}\ndraw - {draw.text}")
+    print("--------------------------------")
+
+
+def get_urls():
+    driver = create_drivers(1)[0]
+    main_url = "https://www.livescore.in/ru/"
 
     driver.implicitly_wait(20)
-    driver.get(url)
-    # time.sleep(2)
-    driver.find_element(By.XPATH,"//div[contains(text(),'LIVE')]").click()
-    # time.sleep(1)
+    driver.get(main_url)
+    time.sleep(2)
+    try:
+        matches = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.CLASS_NAME, "event__match"))
+        )
+    except Exception as e:
+        print("Too long for finding matches")
+        driver.quit()
+    # driver.find_element(By.XPATH,"//div[contains(text(),'LIVE')]").click()
+    time.sleep(2)
 
-    driver.execute_script('window.scrollTo({left:0,top:document.body.scrollHeight,behavior:"smooth"})')
-    # time.sleep(2)
-    matches = driver.find_elements(By.CLASS_NAME,"event__match--live")
+    # driver.execute_script('window.scrollTo({left:0,top:document.body.scrollHeight-100,behavior:"smooth"})')
+    time.sleep(2)
+    # matches = wait.until(EC.elements_to_be_clickable(By.CLASS_NAME,"event__match--live"))
+    try:
+        matches = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.CLASS_NAME, "event__match"))
+        )
+    except Exception as e:
+        print("Too long for finding matches")
+        driver.quit()
 
-    div = len(matches) // CONNECTIONS
-    mod = len(matches) % CONNECTIONS
-    start = (thread_num-1)*div
-    end = start + div
-    if thread_num <= mod:
-        end+=1
-    else:
-        start+=mod
 
-    for i in range(start, end):
-        print(f"{thread_num} process running {i} match...")
-        matches[i].click()
-        time.sleep(1)
-        driver.switch_to.window(driver.window_handles[-1])
-        time.sleep(2)
-        # duelParticipant = driver.find_element(By.CLASS_NAME,"duelParticipant")
-        # print(duelParticipant.text)
-        print("--------------------------------")
-        odds = driver.find_element(By.CLASS_NAME,"oddsRow").find_elements(By.CLASS_NAME,"oddsValueInner")
-        left,draw,right = odds if odds else (None,None,None)
-        if left and draw and right:
-            print(f"left - {left.text}\nright - {right.text}\ndraw - {draw.text}")
-        print("--------------------------------")
-        driver.close()
-        driver.switch_to.window(driver.window_handles[0])
+    matches = driver.find_elements(By.CLASS_NAME,"event__match")
+    urls = ["https://www.livescore.in/ru/match/"+
+            re.sub(r"g_\d_","",match.get_attribute("id"))+
+            "/#/match-summary" for match in matches]
+    return urls
 
-    driver.quit()
+
+
 def main():
-    res = None
-    drivers = create_drivers(CONNECTIONS)
+    urls = get_urls()
+    print(len)
+    numbers = []
     try:
         with pool.ProcessPoolExecutor(max_workers=CONNECTIONS) as executer:
+            wait_complete = []
             for i in range(CONNECTIONS):
-                executer.submit(run)
+                future = executer.submit(run, *(i+1,urls))
+                wait_complete.append(future)
+        for res in pool.as_completed(wait_complete):
 
-            # futures = [executer.submit(run, driver) for driver in drivers]
+            print(f':=> {res.result()}')
 
-            # for future in pool.as_completed(futures):
-            #     result = future.result()
-            #     # Обработка результата
     except Exception as e:
         print("Произошла ошибка:", str(e))
-
-
 
 
 if __name__ == "__main__":
