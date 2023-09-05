@@ -27,7 +27,7 @@ def run(process_num,urls):
     global PROCESS_NUMBER
     print(len(urls))
     PROCESS_NUMBER = process_num
-    print(f"{process_num} is staring...")
+    print(f"{process_num} process is staring...")
     driver = create_drivers(1)[0]
     driver.implicitly_wait(10)
 
@@ -87,21 +87,18 @@ def get_urls():
     driver = create_drivers(1)[0]
     main_url = "https://www.livescore.in/ru/"
 
-    driver.implicitly_wait(20)
     driver.get(main_url)
-    time.sleep(2)
     try:
         matches = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.CLASS_NAME, "event__match"))
+            EC.visibility_of_element_located((By.XPATH,"//div[contains(text(),'LIVE')]"))
         )
     except Exception as e:
         print("Too long for finding matches")
         driver.quit()
-    # driver.find_element(By.XPATH,"//div[contains(text(),'LIVE')]").click()
-    time.sleep(2)
+    driver.find_element(By.XPATH,"//div[contains(text(),'LIVE')]").click()
+
 
     # driver.execute_script('window.scrollTo({left:0,top:document.body.scrollHeight-100,behavior:"smooth"})')
-    time.sleep(2)
     # matches = wait.until(EC.elements_to_be_clickable(By.CLASS_NAME,"event__match--live"))
     try:
         matches = WebDriverWait(driver, 10).until(
@@ -139,4 +136,7 @@ def main():
 
 
 if __name__ == "__main__":
+    start = time.time()
     main()
+    end = time.time()
+    print(end-start," time")
