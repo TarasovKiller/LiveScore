@@ -1,0 +1,6 @@
+*.exe
+venv.
+test*
+proxy_auth_plugin
+.vscode.
+__pycache__
